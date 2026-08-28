@@ -18,6 +18,7 @@ const {
   incomeForMonth, nonCardExpenseTotalForMonth, fixedContributionForMonth,
   cardInstallmentForMonth, cardTotalForMonth, allCardsTotalForMonth,
   currentInvoiceMonthKey, lifetimeTotals,
+  monthKey, shiftMonth, healthIndicatorsForMonth, projectBalance,
 } = fc;
  
 // ------------------------------------------------------------
@@ -230,6 +231,93 @@ test('computeReserva: ignora ativo de "Reserva de emergência" classificado como
   const assets = [{ kind: 'passivo', category: 'Reserva de emergência', value: 15000 }];
   const { reservaAtual } = computeReserva(assets, 5000);
   assert.equal(reservaAtual, 0);
+});
+ 
+// ------------------------------------------------------------
+// Indicadores de saúde financeira (comprometimento de renda / poupança)
+// ------------------------------------------------------------
+test('healthIndicatorsForMonth: comprometimento + poupança somam 100% da renda', () => {
+  const key = monthKey(new Date()); // usa o mês atual pra não esbarrar no "mês passado usa só o realizado" de fixedContributionForMonth
+  const data = {
+    income: [{ amount: 5000, recurring: true }],
+    fixedExpenses: [{ id: 'f1', name: 'Aluguel', category: 'Moradia', payment_method: 'Boleto', amount: 1500, active: true, due_day: 10, frequency: 'mensal', created_at: '2020-01-01' }],
+    expenseEntries: [{ entry_date: key + '-05', amount: 500, payment_method: 'PIX' }],
+    purchases: [],
+  };
+  const { comprometimento, poupanca } = healthIndicatorsForMonth(data, key);
+  // despMes = 1500 (fixa estimada, sem lançamento vinculado) + 0 (cartão) + 500 (variável) = 2000
+  assert.equal(comprometimento, 40); // 2000 / 5000 * 100
+  assert.equal(poupanca, 60); // (5000 - 2000) / 5000 * 100
+});
+ 
+test('healthIndicatorsForMonth: sem renda no mês, indicadores ficam null (não dá pra calcular % de uma base zero)', () => {
+  const data = { income: [], fixedExpenses: [], expenseEntries: [], purchases: [] };
+  const { comprometimento, poupanca } = healthIndicatorsForMonth(data, '2026-08');
+  assert.equal(comprometimento, null);
+  assert.equal(poupanca, null);
+});
+ 
+test('healthIndicatorsForMonth: mês estourado passa de 100% de comprometimento e poupança fica negativa', () => {
+  const data = {
+    income: [{ amount: 2000, recurring: true }],
+    fixedExpenses: [],
+    expenseEntries: [{ entry_date: '2026-08-05', amount: 2500, payment_method: 'PIX' }],
+    purchases: [],
+  };
+  const { comprometimento, poupanca } = healthIndicatorsForMonth(data, '2026-08');
+  assert.equal(comprometimento, 125); // 2500 / 2000 * 100
+  assert.equal(poupanca, -25);
+});
+ 
+// ------------------------------------------------------------
+// Projeção de saldo (próximos meses)
+// ------------------------------------------------------------
+test('projectBalance: renda recorrente menos despesas fixas estimadas, sem cartão nem histórico variável', () => {
+  const nowKey = monthKey(new Date());
+  const data = {
+    income: [{ amount: 5000, recurring: true }],
+    fixedExpenses: [{ id: 'f1', name: 'Aluguel', category: 'Moradia', payment_method: 'Boleto', amount: 1500, active: true, due_day: 10, frequency: 'mensal', created_at: '2020-01-01' }],
+    expenseEntries: [], // nenhum gasto variável nos últimos 3 meses -> média = 0
+    purchases: [],
+  };
+  const projection = projectBalance(data, 1);
+  assert.equal(projection.length, 1);
+  assert.equal(projection[0].m, shiftMonth(nowKey, 1));
+  assert.equal(projection[0].saldo, 3500); // 5000 - 1500
+});
+ 
+test('projectBalance: estima despesa variável futura pela média dos últimos 3 meses realizados', () => {
+  const nowKey = monthKey(new Date());
+  const mPrev2 = shiftMonth(nowKey, -2);
+  const mPrev1 = shiftMonth(nowKey, -1);
+  const data = {
+    income: [{ amount: 4000, recurring: true }],
+    fixedExpenses: [],
+    expenseEntries: [
+      { entry_date: mPrev2 + '-05', amount: 300, payment_method: 'PIX' },
+      { entry_date: mPrev1 + '-05', amount: 600, payment_method: 'PIX' },
+      { entry_date: nowKey + '-05', amount: 900, payment_method: 'PIX' },
+    ],
+    purchases: [],
+  };
+  // média = (300 + 600 + 900) / 3 = 600
+  const projection = projectBalance(data, 2);
+  assert.equal(projection[0].saldo, 3400); // 4000 - 600
+  assert.equal(projection[1].saldo, 3400);
+});
+ 
+test('projectBalance: parcela de cartão já lançada entra na despesa projetada (não é estimativa)', () => {
+  const nowKey = monthKey(new Date());
+  const m1 = shiftMonth(nowKey, 1);
+  const data = {
+    income: [{ amount: 3000, recurring: true }],
+    fixedExpenses: [],
+    expenseEntries: [],
+    purchases: [{ card_id: 'c1', amount: 900, installments: 3, first_month: nowKey + '-01' }], // 300/mês, cobre nowKey..nowKey+2
+  };
+  const projection = projectBalance(data, 1);
+  assert.equal(projection[0].m, m1);
+  assert.equal(projection[0].saldo, 2700); // 3000 - 300 (parcela do cartão em m1)
 });
  
 // ------------------------------------------------------------
