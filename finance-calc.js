@@ -247,12 +247,65 @@
     return nonCardExpenseEntriesForMonth(expenseEntries, key).reduce((s, e) => s + Number(e.amount), 0);
   }
  
+  // Estimativa do quanto uma despesa fixa representa no mês `key` — o valor
+  // cadastrado é POR OCORRÊNCIA (ex.: R$200 por sessão semanal), então o total
+  // do mês é o valor vezes quantas ocorrências caem nesse mês específico
+  // (varia entre meses com 4 ou 5 terças, por exemplo).
+  function fixedExpenseMonthlyEstimate(fx, key) {
+    return fixedExpenseOccurrencesInMonth(fx, key).length * Number(fx.amount);
+  }
+ 
+  function nonCardFixedTotal(fixedList, key) {
+    return nonCardFixedList(fixedList).reduce((s, fx) => s + fixedExpenseMonthlyEstimate(fx, key), 0);
+  }
+ 
   // ---------- saldo do mês ----------
   // Mesma fórmula usada no Dashboard: receitas menos despesas fixas
   // (estimativa do que ainda falta lançar) menos fatura de cartão do mês
   // menos despesas variáveis já lançadas.
   function computeSaldoMes(inc, fixed, cardsTotal, variableTotal) {
     return inc - fixed - cardsTotal - variableTotal;
+  }
+ 
+  // ---------- indicadores de saúde financeira ----------
+  // Últimos 6 meses com histórico, usados na tendência de comprometimento de
+  // renda / taxa de poupança do Dashboard.
+  function healthTrendMonths(data) {
+    return allMonthsSinceStart(data).slice(-6);
+  }
+ 
+  // Comprometimento de renda: quanto % da renda do mês já vai pra despesa
+  // (fixa + cartão + variável). Poupança: o complemento — quanto % sobra.
+  // Ambos null quando não há renda no mês (não dá pra calcular percentual
+  // de uma base zero).
+  function healthIndicatorsForMonth(data, key) {
+    const incMes = incomeForMonth(data.income, key);
+    const despMes = fixedContributionForMonth(data.fixedExpenses, data.expenseEntries, key) + allCardsTotalForMonth(data.purchases, key) + nonCardExpenseTotalForMonth(data.expenseEntries, key);
+    return {
+      comprometimento: incMes > 0 ? (despMes / incMes) * 100 : null,
+      poupanca: incMes > 0 ? ((incMes - despMes) / incMes) * 100 : null,
+    };
+  }
+ 
+  // Projeção de saldo pros próximos N meses: renda recorrente (a única parte
+  // previsível de receita), despesas fixas e parcelas de cartão já lançadas
+  // (esses dois são dados reais, já agendados) somados a uma ESTIMATIVA de
+  // despesas variáveis com base na média dos últimos 3 meses — sinalizado
+  // como estimativa, não promessa, porque gasto variável futuro não dá pra saber.
+  function projectBalance(data, months) {
+    const nowKey = monthKey(new Date());
+    const last3 = [shiftMonth(nowKey, -2), shiftMonth(nowKey, -1), nowKey];
+    const avgVariable = last3.reduce((s, m) => s + nonCardExpenseTotalForMonth(data.expenseEntries, m), 0) / 3;
+    const rendaRecorrente = incomeForMonth(data.income, nowKey);
+    const out = [];
+    for (let i = 1; i <= months; i++) {
+      const m = shiftMonth(nowKey, i);
+      // Recalcula a estimativa das fixas em CADA mês futuro (não uma vez só) —
+      // despesas semanais têm 4 ou 5 ocorrências dependendo do mês.
+      const despesa = nonCardFixedTotal(data.fixedExpenses, m) + allCardsTotalForMonth(data.purchases, m) + avgVariable;
+      out.push({ m, saldo: rendaRecorrente - despesa });
+    }
+    return out;
   }
  
   // ---------- "desde o início" ----------
@@ -307,5 +360,6 @@
     fixedContributionForMonth, cardInstallmentForMonth, cardTotalForMonth, allCardsTotalForMonth,
     currentInvoiceMonthKey, nonCardExpenseEntriesForMonth, nonCardExpenseTotalForMonth,
     computeSaldoMes, allMonthsSinceStart, lifetimeTotals, computePatrimonioLiquido, computeReserva,
+    fixedExpenseMonthlyEstimate, nonCardFixedTotal, healthTrendMonths, healthIndicatorsForMonth, projectBalance,
   };
 });
