@@ -1511,7 +1511,7 @@ function CategorySelect({ value, onChange, options, kind, onCreated }) {
 }
 
 // ---------- LGPD: Política de Privacidade, Termos de Uso ----------
-const POLICY_VERSION = 'v1.2 — agosto de 2026';
+const POLICY_VERSION = 'v1.3 — agosto de 2026';
 // E-mail oficial do encarregado (DPO). Enquanto o app não é comercializado, usa o
 // e-mail já existente da Tonus. Ao lançar para o público, trocar para um e-mail com
 // domínio próprio (ex.: privacidade@tonusconsultoria.com.br), se ele existir de fato.
@@ -1540,6 +1540,7 @@ Para o app funcionar, alguns dados passam por prestadores de serviço que atuam 
 - Supabase (banco de dados, autenticação e armazenamento de arquivos)
 - Resend (envio de e-mails transacionais, como confirmação de cadastro)
 - Cloudflare (hospedagem do aplicativo)
+- Sentry (monitoramento técnico de erros do aplicativo — recebe apenas informações técnicas do erro, como em qual parte do código ele ocorreu; não enviamos seu e-mail, IP ou dados financeiros para essa ferramenta)
 Esses prestadores têm acesso técnico aos dados apenas na medida necessária para prestar o serviço contratado, e possuem suas próprias políticas de segurança e privacidade.
 
 6. POR QUANTO TEMPO GUARDAMOS SEUS DADOS
