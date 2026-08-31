@@ -1,0 +1,19 @@
+name: Verificar versões das bibliotecas (CDN)
+on:
+  schedule:
+    - cron: "0 12 * * 1"  # toda segunda-feira, 12h UTC = 9h no horário de Brasília
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  issues: write
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+    steps:
+      - name: Baixar o repositório
+        uses: actions/checkout@v4
+      - name: Verificar versões e avisar se houver atualização
+        run: python3 .github/scripts/verificar_versoes_cdn.py
