@@ -6,6 +6,27 @@
 <title>Tonus Financeiro — Controle Financeiro Pessoal</title>
 <meta name="description" content="Tonus Financeiro: despesas fixas, cartões de crédito, receitas e fluxo de caixa — equilíbrio para suas finanças pessoais.">
 <meta name="theme-color" content="#1B3A5C">
+  
+<!-- Sentry: monitoramento de erros em produção. Configurado de forma conservadora
+     de propósito, pensando na LGPD: sem gravação de sessão (session replay), sem
+     rastreamento de performance (tracing) e sem enviar dado pessoal por padrão
+     (IP, e-mail etc.) — só a informação técnica do erro em si. -->
+<script>
+  window.sentryOnLoad = function () {
+    Sentry.init({
+      sendDefaultPii: false,
+      integrations: [],
+      tracesSampleRate: 0,
+      replaysSessionSampleRate: 0,
+      replaysOnErrorSampleRate: 0,
+    });
+  };
+</script>
+<script
+  src="https://js.sentry-cdn.com/30a527772339a439fb0f81d6065687f4.min.js"
+  crossorigin="anonymous"
+  
+></script>
 <script>
 // Aplica o tema salvo ANTES da página desenhar qualquer coisa — assim não
 // pisca claro e depois escurece (ou vice-versa) toda vez que o app abre.
