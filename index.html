@@ -556,7 +556,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <!-- Supabase JS client -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<!-- Supabase JS client (versão travada — evita que uma atualização automática
+     da biblioteca quebre o app sem aviso, mesmo problema que já tivemos com o jsPDF) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"></script>
 <!-- Motor de cálculo (saldo, fatura, patrimônio, reserva) — arquivo próprio,
      coberto por testes automatizados (finance-calc.test.js), pra não
      depender só de teste manual em contas que envolvem dinheiro de verdade. -->
