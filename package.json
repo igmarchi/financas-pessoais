@@ -1,0 +1,14 @@
+{
+  "name": "tonus-financeiro-dependencias-cdn",
+  "private": true,
+  "description": "Manifesto usado só para o GitHub Dependabot rastrear vulnerabilidades de segurança nas bibliotecas carregadas via CDN no index.html. O app não usa npm nem build — nada aqui é instalado ou executado.",
+  "dependencies": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "@babel/standalone": "7.23.5",
+    "pdfjs-dist": "3.11.174",
+    "jspdf": "4.2.1",
+    "xlsx": "0.18.5",
+    "@supabase/supabase-js": "2.112.4"
+  }
+}
