@@ -1489,7 +1489,10 @@ function CategorySelect({ value, onChange, options, kind, onCreated }) {
 
 // ---------- LGPD: Política de Privacidade, Termos de Uso ----------
 const POLICY_VERSION = 'v1.2 — agosto de 2026';
-const DPO_EMAIL = 'privacidade@tonusconsultoria.com.br'; // TODO: confirmar e-mail definitivo do encarregado
+// E-mail oficial do encarregado (DPO). Enquanto o app não é comercializado, usa o
+// e-mail já existente da Tonus. Ao lançar para o público, trocar para um e-mail com
+// domínio próprio (ex.: privacidade@tonusconsultoria.com.br), se ele existir de fato.
+const DPO_EMAIL = 'consultoriatonus@gmail.com';
 
 const PRIVACY_POLICY_TEXT = `
 Última atualização: agosto de 2026 (${POLICY_VERSION})
