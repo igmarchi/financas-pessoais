@@ -102,23 +102,32 @@ def main():
 
     existentes = gh_api('GET', f'/repos/{REPO}/issues?state=open&labels={LABEL}')
 
+    # Comentário novo a cada execução com pendência — é o que dispara e-mail toda semana.
+    # Só editar o corpo da issue (sem comentar) NÃO gera notificação por e-mail.
+    comentario = (
+        f'Checagem de {os.environ.get("DATA_EXECUCAO", "hoje")}:\n\n{tabela}\n'
+        '_Gerado automaticamente. Isso não atualiza nada sozinho — é só um aviso._'
+    )
+
     if algum_desatualizado:
         if existentes:
             numero = existentes[0]['number']
             gh_api('PATCH', f'/repos/{REPO}/issues/{numero}', {'body': corpo})
-            print(f'\nIssue #{numero} atualizada.')
+            gh_api('POST', f'/repos/{REPO}/issues/{numero}/comments', {'body': comentario})
+            print(f'\nIssue #{numero} atualizada e comentada (dispara e-mail).')
         else:
             nova = gh_api('POST', f'/repos/{REPO}/issues', {'title': TITLE, 'body': corpo, 'labels': [LABEL]})
-            print(f"\nIssue #{nova['number']} criada.")
+            print(f"\nIssue #{nova['number']} criada (dispara e-mail).")
     else:
         if existentes:
             numero = existentes[0]['number']
             gh_api(
-                'PATCH',
-                f'/repos/{REPO}/issues/{numero}',
-                {'body': corpo + '\n\nTudo em dia nessa checagem — fechando automaticamente.', 'state': 'closed'},
+                'POST',
+                f'/repos/{REPO}/issues/{numero}/comments',
+                {'body': 'Tudo em dia nessa checagem — fechando automaticamente. ✅'},
             )
-            print(f'\nIssue #{numero} fechada (tudo em dia).')
+            gh_api('PATCH', f'/repos/{REPO}/issues/{numero}', {'body': corpo, 'state': 'closed'})
+            print(f'\nIssue #{numero} fechada (tudo em dia, comentário dispara e-mail).')
         else:
             print('\nTudo em dia, nenhuma issue existente para atualizar.')
 
