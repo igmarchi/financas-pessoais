@@ -4868,7 +4868,9 @@ function MetasTab() {
   }
   useEffect(() => { load(); }, []);
 
-  const reservaAtual = assets.filter((x) => x.kind === 'ativo' && x.category === 'Reserva de emergência').reduce((s, x) => s + Number(x.value), 0);
+  // Reaproveita a mesma função (já testada) usada no Dashboard, em vez de
+// recalcular a reserva de emergência de forma separada aqui.
+  const { reservaAtual } = computeReserva(assets, 0);
   const reservaGoal = goals.find((g) => g.kind === 'reserva');
   const customGoals = goals.filter((g) => g.kind === 'meta');
 
