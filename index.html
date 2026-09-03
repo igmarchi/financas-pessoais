@@ -2034,7 +2034,7 @@ function DashboardTab() {
     setPdfError(null);
     try {
       if (!(window.jspdf && window.jspdf.jsPDF)) {
-        await ensureLibLoaded(() => window.jspdf && window.jspdf.jsPDF, 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js');
+        await ensureLibLoaded(() => window.jspdf && window.jspdf.jsPDF, 'vendor/jspdf.umd.min.js');
       }
       const doc = buildRelatorioMensalPdf(window.jspdf.jsPDF, fmtBRL, {
         mesLabel: monthLabel(dashMonth), geradoEm: new Date().toLocaleDateString('pt-BR'),
@@ -6150,7 +6150,7 @@ function PrivacyTab({ session }) {
     setExportError(null);
     try {
       if (!window.XLSX) {
-        await ensureLibLoaded(() => !!window.XLSX, 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+        await ensureLibLoaded(() => !!window.XLSX, 'vendor/xlsx.full.min.js');
       }
       const dados = await fetchAllUserData();
       const wb = XLSX.utils.book_new();
