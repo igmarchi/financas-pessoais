@@ -560,30 +560,68 @@
 <body>
 <div id="root"></div>
 
-<!-- React + Babel (para JSX) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<!-- React + Babel (para JSX). Antes carregadas via CDN (cdnjs); agora ficam
+     hospedadas junto com o próprio app em /vendor, pra não depender de um
+     CDN externo estar de pé/alcançável no momento em que alguém abre o
+     site (foi exatamente isso que causou os erros de produção descritos
+     no commit que introduziu essa mudança). Versão travada = a mesma
+     listada em package.json (usado pelo Dependabot e pelo workflow
+     "Verificar versões das bibliotecas"). -->
+<script src="vendor/react.production.min.js"></script>
+<script src="vendor/react-dom.production.min.js"></script>
+<script src="vendor/babel.min.js"></script>
 <!-- Leitor de PDF (importação de fatura) -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="vendor/pdf.min.js"></script>
 <script>
   if (window.pdfjsLib) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "vendor/pdf.worker.min.js";
   }
 </script>
 <!-- Gerador de PDF (Relatório mensal, no Dashboard) e de planilha Excel
      (export de dados, na aba Privacidade) — ambos rodam só no navegador,
      sem nenhum serviço pago por trás. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/4.2.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<!-- Supabase JS client -->
+<script src="vendor/jspdf.umd.min.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
 <!-- Supabase JS client (versão travada — evita que uma atualização automática
      da biblioteca quebre o app sem aviso, mesmo problema que já tivemos com o jsPDF) -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.4/dist/umd/supabase.js"></script>
+<script src="vendor/supabase.js"></script>
 <!-- Motor de cálculo (saldo, fatura, patrimônio, reserva) — arquivo próprio,
      coberto por testes automatizados (finance-calc.test.js), pra não
      depender só de teste manual em contas que envolvem dinheiro de verdade. -->
 <script src="finance-calc.js"></script>
+
+<!-- Verificação defensiva: mantida mesmo depois de hospedar as bibliotecas
+     localmente (em /vendor), como segunda camada de proteção — por exemplo,
+     se algum arquivo em /vendor não for publicado corretamente no deploy,
+     ou for bloqueado por alguma extensão do navegador do usuário. Mostra
+     uma mensagem clara em vez de deixar a tela em branco/quebrada, e manda
+     o erro real pro Sentry (em vez do genérico "Script error." que
+     aparecia antes). -->
+<script>
+  (function () {
+    var faltando = [];
+    if (typeof React === 'undefined') faltando.push('React');
+    if (typeof ReactDOM === 'undefined' || typeof ReactDOM.createRoot !== 'function') faltando.push('ReactDOM');
+    if (typeof Babel === 'undefined') faltando.push('Babel');
+    if (faltando.length === 0) return;
+
+    var raiz = document.getElementById('root');
+    if (raiz) {
+      raiz.innerHTML =
+        '<div style="max-width:420px;margin:15vh auto;padding:24px;text-align:center;' +
+        'font-family:system-ui,sans-serif;color:#1B3A5C">' +
+        '<p style="font-weight:600;margin-bottom:8px">Não foi possível carregar o Tonus Financeiro.</p>' +
+        '<p style="margin-bottom:16px">Isso costuma acontecer por uma instabilidade momentânea na sua ' +
+        'conexão com a internet. Verifique a conexão e tente novamente.</p>' +
+        '<button onclick="location.reload()" style="padding:10px 20px;border:none;border-radius:6px;' +
+        'background:#1B3A5C;color:#fff;font-size:15px;cursor:pointer">Tentar novamente</button></div>';
+    }
+    if (window.Sentry && typeof window.Sentry.captureException === 'function') {
+      window.Sentry.captureException(new Error('Falha ao carregar dependências essenciais: ' + faltando.join(', ')));
+    }
+    throw new Error('Dependências essenciais não carregaram: ' + faltando.join(', '));
+  })();
+</script>
 
 <script type="text/babel" data-presets="react">
 const { useState, useEffect, useMemo, useRef } = React;
