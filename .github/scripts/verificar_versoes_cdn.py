@@ -1,39 +1,21 @@
 import json
 import os
-import re
 import urllib.request
 
 REPO = os.environ['GITHUB_REPOSITORY']  # ex: "igmarchi/financas-pessoais"
 TOKEN = os.environ['GITHUB_TOKEN']
-MARKER = '<!-- verificacao-dependencias-cdn -->'
-LABEL = 'dependencias-cdn'
-TITLE = 'Bibliotecas via CDN — verificação de versões'
-
-# Nome usado na URL do CDN -> nome real do pacote no npm, só quando é diferente.
-NPM_NAME_OVERRIDES = {
-    'babel-standalone': '@babel/standalone',
-    'pdf.js': 'pdfjs-dist',
-}
+MARKER = '<!-- verificacao-dependencias-vendor -->'
+LABEL = 'dependencias-cdn'  # nome do label mantido para não perder o histórico da issue já existente
+TITLE = 'Bibliotecas em /vendor — verificação de versões'
 
 
-def read_index_html():
-    with open('index.html', encoding='utf-8') as f:
-        return f.read()
-
-
-def find_pinned_versions(html):
-    found = {}
-    # cdnjs.cloudflare.com/ajax/libs/<lib>/<versao>/...
-    for lib, version in re.findall(
-        r'cdnjs\.cloudflare\.com/ajax/libs/([a-zA-Z0-9_.\-]+)/(\d+\.\d+\.\d+(?:-[\w.]+)?)/', html
-    ):
-        found[lib] = version
-    # cdn.jsdelivr.net/npm/<pacote>@<versao>/...  (pacote pode ter escopo @org/nome)
-    for pkg, version in re.findall(
-        r'cdn\.jsdelivr\.net/npm/(@?[\w.\-]+(?:/[\w.\-]+)?)@(\d+\.\d+\.\d+(?:-[\w.]+)?)/', html
-    ):
-        found[pkg] = version
-    return found
+def read_pinned_versions():
+    # As bibliotecas ficam hospedadas localmente em /vendor; a versão de cada
+    # uma continua travada aqui no package.json (mesmo manifesto usado pelo
+    # Dependabot), não mais em URLs de CDN dentro do index.html.
+    with open('package.json', encoding='utf-8') as f:
+        manifesto = json.load(f)
+    return manifesto.get('dependencies', {})
 
 
 def npm_latest(pkg_name):
@@ -58,15 +40,13 @@ def gh_api(method, path, body=None):
 
 
 def main():
-    html = read_index_html()
-    pinned = find_pinned_versions(html)
+    pinned = read_pinned_versions()
 
     linhas = []
     algum_desatualizado = False
     for nome, versao_travada in sorted(pinned.items()):
-        pacote_npm = NPM_NAME_OVERRIDES.get(nome, nome)
         try:
-            versao_mais_recente = npm_latest(pacote_npm)
+            versao_mais_recente = npm_latest(nome)
             desatualizado = versao_mais_recente != versao_travada
             situacao = '🔴 desatualizada' if desatualizado else '🟢 em dia'
         except Exception as e:
@@ -88,9 +68,10 @@ def main():
 
     corpo = (
         f'{MARKER}\n\n'
-        'Checagem semanal e automática das bibliotecas carregadas via CDN no `index.html`. '
-        'Isso **não atualiza nada sozinho** — é só um aviso, pra você decidir com calma se quer '
-        'atualizar, testar e trocar a versão travada manualmente.\n\n'
+        'Checagem semanal e automática das bibliotecas de terceiros hospedadas localmente em '
+        '`/vendor` (versão travada em `package.json`). Isso **não atualiza nada sozinho** — é só '
+        'um aviso, pra você decidir com calma se quer atualizar: baixar os arquivos da nova versão, '
+        'substituir em `/vendor`, testar e só então atualizar a versão travada no `package.json`.\n\n'
         f'{tabela}\n'
         '_Gerado automaticamente pelo workflow "Verificar versões das bibliotecas (CDN)"._'
     )
