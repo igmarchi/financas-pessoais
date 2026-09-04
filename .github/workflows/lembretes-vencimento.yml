@@ -7,13 +7,13 @@ jobs:
   enviar:
     runs-on: ubuntu-latest
     env:
-      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+      LEMBRETES_CRON_SECRET: ${{ secrets.LEMBRETES_CRON_SECRET }}
     steps:
       - name: Chamar a Edge Function enviar-lembretes-vencimento
         run: |
           resposta=$(curl -sS -w "\n%{http_code}" -X POST \
             "https://hdbhoquhszehzbhtwdui.functions.supabase.co/enviar-lembretes-vencimento" \
-            -H "Authorization: Bearer ${CRON_SECRET}")
+            -H "Authorization: Bearer ${LEMBRETES_CRON_SECRET}")
           corpo=$(echo "$resposta" | head -n -1)
           status=$(echo "$resposta" | tail -n1)
           echo "Status HTTP: $status"
