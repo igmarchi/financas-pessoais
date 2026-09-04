@@ -642,6 +642,11 @@ const {
 // ============================================================
 const SUPABASE_URL = "https://hdbhoquhszehzbhtwdui.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhkYmhvcXVoc3plaHpiaHR3ZHVpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY2MTg2MDIsImV4cCI6MjEwMjE5NDYwMn0.J9pFtSUonUGykoBXood1Q1sgchi2ndvi0X3zDDJQoW4";
+// Chave pública VAPID (par com a privada guardada como secret na Edge
+// Function enviar-lembretes-vencimento) — usada só pra criar a inscrição
+// de push no navegador em PrivacyTab/NotificationsCard. É pública por
+// natureza (o protocolo Web Push exige isso), não precisa ser secreta.
+const VAPID_PUBLIC_KEY = "BGb6QLwvG49qEBjpOzi1swjPf4tm-3uvlWON-pa70BT-z0HR9f7AFNS2dfQFYiZ9jlJ6GR9BcCT1AasiOlZHBw0";
 
 const supabaseReady = SUPABASE_URL.startsWith("http") && SUPABASE_ANON_KEY.length > 20;
 // Sessão em sessionStorage (não localStorage): isso faz o login "sumir"
@@ -6049,6 +6054,162 @@ function DespesasSection({ session }) {
   );
 }
 
+// Converte a chave pública VAPID (base64url, formato do padrão Web Push)
+// pro Uint8Array que pushManager.subscribe() exige em applicationServerKey.
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+// ---------- Notificações de vencimento (e-mail + push) ----------
+// Preferências por canal (tabela profiles) + inscrição de push deste
+// aparelho (tabela push_subscriptions). Quem realmente manda os lembretes
+// é a Edge Function enviar-lembretes-vencimento, rodando 1x/dia — este
+// componente só cuida de ligar/desligar e, no caso do push, pedir a
+// permissão do navegador e guardar a inscrição.
+function NotificationsCard({ session }) {
+  const [emailEnabled, setEmailEnabled] = useState(true);
+  const [pushEnabled, setPushEnabled] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [savingPush, setSavingPush] = useState(false);
+  const [pushMsg, setPushMsg] = useState(null); // { type: 'error'|'success', text }
+  // No iPhone/iPad, o Safari só expõe a Push API dentro do app instalado na
+  // Tela de Início (iOS 16.4+) — abrindo pelo navegador normal, PushManager
+  // nem existe. Detecta esse caso pra trocar "não é compatível" (parece
+  // definitivo) por uma instrução de como resolver.
+  const isIOSDevice = typeof navigator !== 'undefined' && (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  );
+  const isStandalone = typeof window !== 'undefined' && (
+    window.navigator.standalone === true ||
+    window.matchMedia('(display-mode: standalone)').matches
+  );
+  const iosPrecisaInstalar = isIOSDevice && !isStandalone;
+  const pushSupported = typeof window !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window;
+
+  useEffect(() => {
+    sb.from('profiles').select('notif_email_enabled, notif_push_enabled').eq('id', session.user.id).maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setEmailEnabled(data.notif_email_enabled !== false);
+          setPushEnabled(!!data.notif_push_enabled);
+        }
+        setLoading(false);
+      });
+  }, [session.user.id]);
+
+  async function handleToggleEmail(checked) {
+    setSavingEmail(true);
+    const prev = emailEnabled;
+    setEmailEnabled(checked);
+    const { error } = await sb.from('profiles').update({ notif_email_enabled: checked }).eq('id', session.user.id);
+    if (error) setEmailEnabled(prev);
+    setSavingEmail(false);
+  }
+
+  async function handleTogglePushOff() {
+    setSavingPush(true);
+    setPushEnabled(false);
+    await sb.from('profiles').update({ notif_push_enabled: false }).eq('id', session.user.id);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        await sb.from('push_subscriptions').delete().eq('endpoint', sub.endpoint);
+        await sub.unsubscribe();
+      }
+    } catch (e) { /* melhor deixar desligado no perfil mesmo se a limpeza local falhar */ }
+    setSavingPush(false);
+  }
+
+  async function handleTogglePushOn() {
+    setPushMsg(null);
+    if (Notification.permission === 'denied') {
+      setPushMsg({ type: 'error', text: 'As notificações estão bloqueadas para este site nas configurações do seu navegador. Libere lá e tente de novo.' });
+      return;
+    }
+    setSavingPush(true);
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') {
+        setPushMsg({ type: 'error', text: 'É preciso permitir notificações para ativar esse lembrete.' });
+        setSavingPush(false);
+        return;
+      }
+      const reg = await navigator.serviceWorker.ready;
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+      }
+      const raw = sub.toJSON();
+      const { error: errSub } = await sb.from('push_subscriptions').upsert({
+        user_id: session.user.id,
+        endpoint: raw.endpoint,
+        p256dh: raw.keys.p256dh,
+        auth_key: raw.keys.auth,
+        user_agent: navigator.userAgent,
+      }, { onConflict: 'endpoint' });
+      if (errSub) throw errSub;
+      const { error: errProfile } = await sb.from('profiles').update({ notif_push_enabled: true }).eq('id', session.user.id);
+      if (errProfile) throw errProfile;
+      setPushEnabled(true);
+    } catch (e) {
+      setPushMsg({ type: 'error', text: 'Não foi possível ativar as notificações push: ' + e.message });
+      setPushEnabled(false);
+    }
+    setSavingPush(false);
+  }
+
+  if (loading) return null;
+
+  return (
+    <div className="card section-gap">
+      <h3 className="section-title">Notificações</h3>
+      <p style={{ fontSize: 13.5, color: 'var(--ink-soft)', margin: '0 0 14px' }}>
+        Lembrete de contas a vencer — despesas fixas e faturas de cartão — enviado 3 dias antes do vencimento e no dia. Escolha por qual(is) canal(is) quer receber.
+      </p>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+        <input type="checkbox" checked={emailEnabled} disabled={savingEmail} onChange={(e) => handleToggleEmail(e.target.checked)} />
+        <span>Receber por e-mail</span>
+      </label>
+      <label style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: iosPrecisaInstalar ? 0.55 : 1 }}>
+        <input
+          type="checkbox"
+          checked={pushEnabled}
+          disabled={savingPush || !pushSupported || iosPrecisaInstalar}
+          onChange={(e) => (e.target.checked ? handleTogglePushOn() : handleTogglePushOff())}
+        />
+        <span>Receber por notificação push (neste aparelho/navegador)</span>
+      </label>
+      {iosPrecisaInstalar && (
+        <p style={{ fontSize: 12, color: 'var(--ink-faint)', margin: '10px 0 0' }}>
+          📲 No iPhone/iPad, notificação push só funciona com o Tonus Financeiro adicionado à Tela de Início: toque no ícone de compartilhar do Safari e escolha "Adicionar à Tela de Início". Depois, abra o app por esse ícone (não pelo Safari) — o toggle acima libera sozinho.
+        </p>
+      )}
+      {!pushSupported && !iosPrecisaInstalar && (
+        <p style={{ fontSize: 12, color: 'var(--ink-faint)', margin: '10px 0 0' }}>
+          Este navegador não é compatível com notificação push. E-mail continua funcionando normalmente.
+        </p>
+      )}
+      {pushEnabled && pushSupported && (
+        <p style={{ fontSize: 12, color: 'var(--ink-faint)', margin: '10px 0 0' }}>
+          Ativo neste aparelho. Se trocar de navegador ou aparelho, ative de novo por lá — cada um guarda sua própria inscrição.
+        </p>
+      )}
+      {pushMsg && <Banner type={pushMsg.type}>{pushMsg.text}</Banner>}
+    </div>
+  );
+}
+
 // ---------- Privacidade (LGPD) ----------
 function PrivacyTab({ session }) {
   const [openDoc, setOpenDoc] = useState(null);
@@ -6216,6 +6377,8 @@ function PrivacyTab({ session }) {
           {registrandoBiometria ? 'Ativando...' : '🔐 Ativar biometria neste aparelho'}
         </button>
       </div>
+
+      <NotificationsCard session={session} />
 
       <div className="card section-gap">
         <h3 className="section-title">Documentos</h3>

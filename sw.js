@@ -35,3 +35,35 @@ self.addEventListener("fetch", (event) => {
       .catch(() => caches.match(event.request))
   );
 });
+
+// Notificação push (lembrete de vencimento, enviado pela Edge Function
+// enviar-lembretes-vencimento). Payload esperado: { title, body, url }.
+self.addEventListener("push", (event) => {
+  let dados = { title: "🔔 Tonus Financeiro", body: "Você tem uma nova notificação." };
+  if (event.data) {
+    try { dados = event.data.json(); } catch (e) { dados.body = event.data.text() || dados.body; }
+  }
+  event.waitUntil(
+    self.registration.showNotification(dados.title || "🔔 Tonus Financeiro", {
+      body: dados.body || "",
+      icon: "./icon-192.png",
+      badge: "./icon-192.png",
+      data: { url: dados.url || "./index.html" },
+    })
+  );
+});
+
+// Clique na notificação: foca uma aba já aberta do app, se houver, ou
+// abre uma nova apontando pra URL enviada no push.
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const alvo = event.notification.data && event.notification.data.url ? event.notification.data.url : "./index.html";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((janelas) => {
+      for (const janela of janelas) {
+        if (janela.url.includes(self.location.origin) && "focus" in janela) return janela.focus();
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(alvo);
+    })
+  );
+});
