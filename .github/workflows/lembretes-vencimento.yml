@@ -1,0 +1,24 @@
+name: Enviar lembretes de vencimento (e-mail + push)
+on:
+  schedule:
+    - cron: "0 11 * * *"  # todo dia, 11h UTC = 8h no horário de Brasília
+  workflow_dispatch: {}
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+    env:
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Chamar a Edge Function enviar-lembretes-vencimento
+        run: |
+          resposta=$(curl -sS -w "\n%{http_code}" -X POST \
+            "https://hdbhoquhszehzbhtwdui.functions.supabase.co/enviar-lembretes-vencimento" \
+            -H "Authorization: Bearer ${CRON_SECRET}")
+          corpo=$(echo "$resposta" | head -n -1)
+          status=$(echo "$resposta" | tail -n1)
+          echo "Status HTTP: $status"
+          echo "Resposta: $corpo"
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            echo "::error::Chamada à Edge Function falhou (status $status)"
+            exit 1
+          fi
